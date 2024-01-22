@@ -1,0 +1,242 @@
+﻿@{
+    ViewData["Title"] = "Index";
+}
+
+<h2 id="titreRoom">Chat</h2>
+
+<div class="row" id="login-row">
+    <div class="col-md-2">
+        <div class="form-group">
+            <label for="nomUtilisateur" class="control-label">Nom utilisateur</label>
+            <input name="nomUtilisateur" id="nomUtilisateur" class="form-control" type="text" />
+        </div>
+        <button class="btn btn-warning btn-sm" id="btn-startChat">
+            Démarrer le chat
+        </button>
+        <br>
+    </div>
+</div>
+
+<div id="selectionDeRoom" hidden="true">
+    <input type="text" id="txtNomRoom" />
+    <button id="btCreerRoom" disabled>Creer une autre Room</button>
+    <select id="lstRoom" required>
+        <option value="" selected>Principal</option>
+    </select>
+    <button id="btRejoindre" >Rejoindre</button>
+</div>
+
+<div class="row" id="chat-row" style="display:none">
+    <div class="col-md-5">
+        <div class="panel panel-primary">
+            <div class="panel-heading" id="accordion">
+                <span class="glyphicon glyphicon-comment"></span> Discussion en direct
+            </div>
+            <div class="panel-collapse" id="collapseOne">
+                <div class="panel-body">
+                    <ul class="chat" id="listeMessages"></ul>
+                </div>
+                <div class="panel-footer">
+                    <div class="input-group">
+                        <input id="message-input" type="text" class="form-control input-sm" placeholder="Type your message here..." />
+                        <span class="input-group-btn">
+                            <button class="btn btn-warning btn-sm" id="btn-send">
+                                Send
+                            </button>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section scripts {
+    <script src="~/lib/microsoft/signalr/dist/browser/signalr.js"></script>
+
+    <script>
+        $(function () {
+            let connexion = null;
+            let nomUtilisateur = null;
+            
+            //##############################################################################################################
+
+            var inputNomRoom = document.getElementById("txtNomRoom");
+            var btCreerRoom = document.getElementById("btCreerRoom");
+            var lstRoom = document.getElementById("lstRoom");
+            var btRejoindre = document.getElementById("btRejoindre");
+            var locationRoom = document.getElementById("LocationRoom");
+            var selectionDeRoom = document.getElementById("selectionDeRoom");
+
+            let numeroRoom = 1;
+            console.log("ping!");
+            inputNomRoom.onkeyup = function () {
+                console.log(inputNomRoom.value.length);
+                btCreerRoom.disabled = inputNomRoom.value.length < 5;
+            }
+
+            btCreerRoom.onclick = function () {
+                var option = document.createElement("option");
+                option.value = numeroRoom;
+                option.text = inputNomRoom.value;
+                lstRoom.appendChild(option);
+                numeroRoom++;
+                lstRoom.disabled = lstRoom.options.length < 1;
+            }
+
+            btRejoindre.onclick = function () {
+                titreRoom.innerHTML = `Room ${lstRoom.options[lstRoom.selectedIndex].text}`;
+                connexion.invoke("CreateJoinChatRoom", lstRoom.options[lstRoom.selectedIndex].text);
+                effacerMessages();
+            }
+
+            //##############################################################################################################
+
+            
+
+            document.getElementById("btn-startChat")
+                .onclick = function () {
+                    nomUtilisateur = document.getElementById("nomUtilisateur").value;
+                    
+                    
+                    
+                    if (nomUtilisateur) {
+                        
+                        document.getElementById("login-row").style.display = 'none';
+                        document.getElementById("chat-row").style.display = 'block';
+                        titreRoom.innerHTML = `Room ${lstRoom.options[lstRoom.selectedIndex].text}`;
+                        selectionDeRoom.hidden = false;
+                        connexion = new signalR.HubConnectionBuilder().withUrl("/chatHub").build();
+
+                        connexion.on("AfficherMessageAutres", function (message) {
+                            afficherMessageAutre(message);
+                        });
+
+                        connexion.on("AfficherMessageMoi", function (message) {
+                            afficherMessageMoi(message);
+                        });
+
+                        connexion.on("DemarrageChat", function (messages) {
+                            
+                            messages.forEach(function (message) {
+                                if (nomUtilisateur == message.nomUtilisateur) {
+                                    afficherMessageMoi(message);
+                                } else {
+                                    afficherMessageAutre(message);
+                                }
+                                
+                            });
+                        });
+
+                        
+
+                        connexion.on("MettreAJour", function (Keys) {
+                            console.log("MAJ");
+                            console.log(Keys);
+                            var valueOptions = 1;
+                            Keys.map((key) => {
+
+                                var listeTableauOptions = [];
+                                for (var i = 0; i < lstRoom.options.length; i++) {
+                                    listeTableauOptions.push(lstRoom.options[i].text);
+                                }
+
+                                if (!listeTableauOptions.includes(key)) {
+
+                                    var option = document.createElement("option");
+                                    option.value = valueOptions;
+                                    option.text = key;
+                                    lstRoom.appendChild(option);
+                                    valueOptions++;
+                                }
+                            
+                            });
+                            if (lstRoom.value > 0) {
+                            btRejoindre.disabled = false;
+                            }
+                        })
+
+                        function fulfilled() {
+                            connexion.invoke("CreateJoinChatRoom", lstRoom.options[lstRoom.selectedIndex].text);
+                            MettreAJour();
+                        }
+
+                        function rejected() {
+                            console.log("Connection echoue");
+                        }
+
+                        connexion.start().then(fulfilled, rejected).catch(function (err) {
+                            MettreAJour();
+                            return console.error(err.toString());
+                        });
+
+                        let afficherMessageAutre = function (message) {
+                            console.log("AfficherMessageAutre");
+                            afficherGabaritMessage(message, gabaritMessageUtilisateurAutre);
+                        };
+
+                        let afficherMessageMoi = function (message) {
+                            console.log("AfficherMessageMoi");
+                            afficherGabaritMessage(message, gabaritMessageUtilisateurCourant);
+                        };
+
+                        let afficherGabaritMessage = function (message, gabarit) {
+                            gabarit = gabarit.replace("{{message}}", message.texte);
+                            gabarit = gabarit.replace("{{userDisplayName}}", message.nomUtilisateur);
+
+                            $("#listeMessages").append($(gabarit));
+                        }
+
+                    }
+                        
+            };
+
+            let MettreAJour = function () {
+                connexion.invoke("MettreAJour");
+            }
+
+            
+
+            let effacerMessages = function () {
+                $("#listeMessages").empty();
+            }
+            document.getElementById("btn-send")
+                .onclick = function () {
+                    let texteMessage = document.getElementById("message-input").value;
+                    let message = {
+                        texte: texteMessage,
+                        nomUtilisateur: nomUtilisateur
+                    };
+                    connexion.invoke("SendMessage", message);
+                    document.getElementById("message-input").value = "";
+                };
+            
+        });
+
+        let gabaritMessageUtilisateurCourant = `                            
+                <li class="m-2 text-end">
+                    <button type="button" class="btn btn-primary position-relative" disabled>
+                                                        {{message}}
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-primary-subtle text-black">
+                                                          {{userDisplayName}}
+                        <span class="visually-hidden">unread messages</span>
+                        </span>
+                    </button>
+                </li>
+            `;
+
+
+
+        let gabaritMessageUtilisateurAutre = `
+                <li class="m-2 text-start">
+                    <button type="button" class="btn btn-success position-relative" disabled>
+                                                    {{message}}
+                        <span class="position-absolute top-0 start-0 translate-middle badge rounded-pill bg-success-subtle text-black">
+                                                          {{userDisplayName}}
+                        <span class="visually-hidden">unread messages</span>
+                        </span>
+                    </button>
+                </li>
+        `;
+    </script>
+}

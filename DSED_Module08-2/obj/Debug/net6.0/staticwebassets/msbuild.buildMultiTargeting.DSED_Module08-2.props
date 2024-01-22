@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="..\build\DSED_Module08-2.props" />
+</Project>
